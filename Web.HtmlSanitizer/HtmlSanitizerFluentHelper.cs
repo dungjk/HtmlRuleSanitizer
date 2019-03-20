@@ -27,14 +27,6 @@ namespace Vereyon.Web {
       return sanitizer;
     }
 
-    /// <summary>White lists the specified space seperated CSS class names.</summary>
-    /// <param name="sanitizer">The sanitizer.</param>
-    /// <param name="classNames">The class names.</param>
-    /// <returns></returns>
-    public static HtmlSanitizer AllowCss (this HtmlSanitizer sanitizer, string classNames) {
-      return sanitizer.AllowCss (classNames.Split (' '));
-    }
-
     /// <summary>
     /// White lists the specified HTML tag, creating a rule for it which allows further specification of what is to be done
     /// with the tag.

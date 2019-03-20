@@ -117,5 +117,26 @@ namespace Vereyon.Web {
       result = sanitizer.Sanitize (input);
       Assert.Equal (input, result);
     }
+
+    /// <summary>
+    /// Tests if attribute work with data URI
+    /// </summary>
+    [Fact]
+    public void AHrefUrlDataUriCheckTest () {
+
+      string result;
+      var sanitizer = new HtmlSanitizer ();
+      sanitizer.Tag ("a").CheckAttribute ("href", HtmlSanitizerCheckType.Url);
+
+      // Test some well formed href
+      var inputLegal = @"<a href=""data:image/svg+xml;base64,UEsDBBQAAAAI"">That XSS trick</a>";
+      result = sanitizer.Sanitize (inputLegal);
+      Assert.Equal (inputLegal, result);
+
+      // Test a illegal
+      var inputIllegal = @"<a href=""data:html/text;base64,UEsDBBQAAAAI"">That XSS trick</a>";
+      result = sanitizer.Sanitize (inputIllegal);
+      Assert.Equal ("That XSS trick", result);
+    }
   }
 }

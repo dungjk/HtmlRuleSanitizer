@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
 namespace Vereyon.Web {
@@ -13,6 +14,10 @@ namespace Vereyon.Web {
   ///         and: https://github.com/xing/wysihtml5/blob/master/parser_rules/simple.js
   /// </remarks>
   public class HtmlSanitizer : IHtmlSanitizer {
+    /// <summary>
+    /// </summary>
+    private static readonly Regex imageMimeRegex = new Regex(@"^image\/\w+([\.\+-]{0,1}\w+)$", RegexOptions.Compiled);
+
     /// <summary>
     /// Determines if CSS classes are sanitized.
     /// </summary>
@@ -79,7 +84,6 @@ namespace Vereyon.Web {
     private void RegisterChecks () {
 
       AttributeCheckRegistry.Add (HtmlSanitizerCheckType.Url, new HtmlSanitizerAttributeCheckHandler (UrlCheckHandler));
-      AttributeCheckRegistry.Add (HtmlSanitizerCheckType.DataUri, new HtmlSanitizerAttributeCheckHandler (DataUriHandler));
       AttributeCheckRegistry.Add (HtmlSanitizerCheckType.AllowAttribute, new HtmlSanitizerAttributeCheckHandler (x => SanitizerOperation.DoNothing));
     }
 
@@ -93,7 +97,7 @@ namespace Vereyon.Web {
     /// <summary>
     /// Collection of the allowed URI schemes.
     /// </summary>
-    public static IEnumerable<string> AllowedUriSchemes = new string[] { "http", "https", "mailto" };
+    public static IEnumerable<string> AllowedUriSchemes = new string[] { "http", "https", "mailto", "data" };
 
     /// <summary>
     /// Checks if the passed HTML attribute contains a valid URL.
@@ -104,27 +108,33 @@ namespace Vereyon.Web {
       string url = attribute.Value;
 
       Uri uri;
-      if (!Uri.TryCreate (url, UriKind.RelativeOrAbsolute, out uri))
+      if (!Uri.TryCreate (url, UriKind.RelativeOrAbsolute, out uri)) {
         return false;
+      }
 
       // Reject the url if it is not well formed.
-      if (!uri.IsWellFormedOriginalString ())
+      if (!uri.IsWellFormedOriginalString ()) {
         return false;
+      }
 
       // Reject the url if it has invalid scheme. Only do this check if we are dealing with an absolute url.
-      if (uri.IsAbsoluteUri && !AllowedUriSchemes.Contains (uri.Scheme, StringComparer.OrdinalIgnoreCase))
+      if (uri.IsAbsoluteUri && !AllowedUriSchemes.Contains (uri.Scheme, StringComparer.OrdinalIgnoreCase)) {
         return false;
+      }
 
+      // With data scheme, we only allow image format
+      if(uri.IsAbsoluteUri && string.Equals("data", uri.Scheme, StringComparison.OrdinalIgnoreCase)){
+        var dataUri = DataUriHelper.Parse(WebUtility.HtmlDecode(attribute.Value));
+        if(dataUri == null){
+          return false;
+        }
+        if(!imageMimeRegex.IsMatch(dataUri.Mime) || !string.Equals("base64", dataUri.Encoding, StringComparison.OrdinalIgnoreCase)){
+          return false;
+        }
+      }
       // Make sure to the url is well formed.
       attribute.Value = uri.ToString ();
 
-      return true;
-    }
-
-    public static bool AttributeDataUriCheck (HtmlAttribute attribute) {
-      var dataUrl = attribute.Value;
-      var dataUriContent = DataUriHelper.Parse (dataUrl);
-      if (dataUriContent == null) return false;
       return true;
     }
 
@@ -136,21 +146,7 @@ namespace Vereyon.Web {
     public static SanitizerOperation UrlCheckHandler (HtmlAttribute attribute) {
 
       // Check the url. We assume that there's no use in keeping for example a link tag without a href, so flatten the tag on failure.
-      if (!AttributeUrlCheck (attribute))
-        return SanitizerOperation.FlattenTag;
-
-      return SanitizerOperation.DoNothing;
-    }
-    /// <summary>
-    /// Check if the attribute contains a valis base64 content
-    /// </summary>
-    /// <param name="attribute"></param>
-    /// <return></return>
-    public static SanitizerOperation DataUriHandler (HtmlAttribute attribute) {
-      if (!AttributeDataUriCheck (attribute)) {
-        return SanitizerOperation.FlattenTag;
-      }
-      return SanitizerOperation.DoNothing;
+      return AttributeUrlCheck (attribute) ? SanitizerOperation.DoNothing : SanitizerOperation.FlattenTag;
     }
 
     /// <summary>
@@ -486,11 +482,6 @@ namespace Vereyon.Web {
     /// <summary>
     /// Specifies that this attribute is allowed and that it's value is not to be checked.
     /// </summary>
-    AllowAttribute,
-
-    /// <summary>
-    /// Check if the passed HTML attribute contains a valid Data URI
-    /// </summary>
-    DataUri
+    AllowAttribute
   }
 }
